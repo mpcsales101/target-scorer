@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1113">
+<title>Target Scorer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" class="dot"/></svg>Target Scorer</div>
+  <div class="pill" id="pill">Not locked</div>
+</header>
+
+<main>
+  <!-- SHOOT -->
+  <section class="tab active" id="tab-shoot">
+    <div class="setup">
+      <select id="profileSel" aria-label="Target"></select>
+      <select id="calibreSel" aria-label="Calibre">
+        <option value="4.5">.177 (4.5 mm)</option>
+        <option value="5.5">.22 (5.5 mm)</option>
+      </select>
+    </div>
+
+    <div class="viewwrap">
+      <canvas id="view"></canvas>
+      <div class="empty" id="empty">
+        <p>Point your phone at the target from the firing line.</p>
+        <div class="row">
+          <button class="accent" id="btnCam">Start camera</button>
+          <label class="btn">Photos<input type="file" accept="image/*" multiple id="photoIn" hidden></label>
+          <button id="btnDemo">Try demo</button>
+        </div>
+      </div>
+      <div class="banner" id="banner" hidden></div>
+      <div class="viewtools">
+        <button id="btnZoom" title="Magnify">1×</button>
+      </div>
+    </div>
+    <div class="status" id="status">Start the camera, load photos, or try the demo range.</div>
+
+    <div class="readout">
+      <div><span>Last</span><b id="rLast">–</b></div>
+      <div><span>Total</span><b id="rTotal">–</b><small id="rDec"></small></div>
+      <div><span>Shots</span><b id="rCount">0</b></div>
+    </div>
+
+    <div class="actions">
+      <button id="btnFind">Find target</button>
+      <button class="accent big" id="btnScore">Score shot</button>
+      <button class="toggle" id="btnAuto" aria-pressed="false">Auto</button>
+    </div>
+    <div class="actions small">
+      <button id="btnAdd">＋ Add</button>
+      <button id="btnDel" disabled>Delete</button>
+      <button id="btnUndo" disabled>Undo</button>
+      <button id="btnRef" title="Re-take the reference image without scoring">Reset ref</button>
+      <button id="btnFire" hidden>Fire demo shot</button>
+    </div>
+
+    <div class="grid2">
+      <div class="panel plotwrap"><canvas id="plot"></canvas></div>
+      <div class="panel" id="stats"></div>
+    </div>
+
+    <div class="panel">
+      <div class="phead"><h3>Card</h3><div class="row"><button id="btnNewCard">New card</button><button id="btnEnd">End session</button></div></div>
+      <div id="series"></div>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <details class="panel" id="srcPanel">
+      <summary>Camera &amp; source</summary>
+      <div class="form">
+        <div class="row">
+          <button id="btnCam2">Camera</button>
+          <label class="btn">Add photos<input type="file" accept="image/*" multiple id="photoIn2" hidden></label>
+          <button id="btnDemo2">Demo range</button>
+        </div>
+        <label id="camRow" hidden>Camera <select id="camSel"></select></label>
+        <label id="zoomRow" hidden>Zoom <input type="range" id="zoomIn"> <output id="zoomOut"></output></label>
+        <label id="lockRow" hidden class="check"><input type="checkbox" id="lockIn"> Lock focus &amp; exposure (after locking on)</label>
+        <p class="hint" id="srcInfo"></p>
+      </div>
+    </details>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="tab" id="tab-history">
+    <div class="panel"><h3>Progress</h3><div id="chart"></div></div>
+    <div id="sessList"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="tab" id="tab-settings">
+    <div class="panel form">
+      <h3>Scoring</h3>
+      <label>Shots per series <input type="number" id="setSeries" min="1" max="60"></label>
+      <label>Sight click value (mm at your distance, 0 = off) <input type="number" id="setClick" step="0.1" min="0"></label>
+      <label class="check"><input type="checkbox" id="setRings"> Show ring overlay on camera</label>
+      <label class="check"><input type="checkbox" id="setBeep"> Beep &amp; vibrate on a new shot</label>
+      <label class="check"><input type="checkbox" id="setSpeak"> Speak scores aloud</label>
+    </div>
+    <div class="panel form">
+      <h3>Detection</h3>
+      <label>Sensitivity <input type="range" id="setThr" min="6" max="40" step="1"></label>
+      <p class="hint">Slide left to catch fainter holes, right if it picks up things that aren't holes.</p>
+    </div>
+    <div class="panel form">
+      <h3>Custom targets</h3>
+      <div id="customList"></div>
+      <p class="hint">For club targets with equally spaced rings. Measure ring diameters across the outside of the ring lines.</p>
+      <label>Name <input id="cName" placeholder="Club 6 yd pistol"></label>
+      <div class="row2">
+        <label>Top score <input type="number" id="cTop" value="10"></label>
+        <label>Number of rings <input type="number" id="cCount" value="10"></label>
+      </div>
+      <div class="row2">
+        <label>Inner ring Ø mm <input type="number" id="cInner" step="0.1"></label>
+        <label>Step between rings Ø mm <input type="number" id="cStep" step="0.1"></label>
+      </div>
+      <div class="row2">
+        <label>Black aiming mark Ø mm (0 = none) <input type="number" id="cBlack" step="0.1" value="0"></label>
+        <label>Bulls on the card <input type="number" id="cBulls" value="1" min="1" max="25"></label>
+      </div>
+      <label>Inner ten Ø mm (optional) <input type="number" id="cInnerTen" step="0.1"></label>
+      <button class="accent" id="cSave">Save target</button>
+    </div>
+    <div class="panel form">
+      <h3>Data</h3>
+      <div class="row"><button id="btnExportAll">Export all (JSON)</button><button class="danger" id="btnWipe">Delete all history</button></div>
+    </div>
+    <div class="panel tips">
+      <h3>Tips for good detection</h3>
+      <ul>
+        <li>Use the telephoto lens or zoom until each hole is at least 8–10 px wide. The status line shows this after locking on.</li>
+        <li>Holes in the black only show when light comes through them. A small light behind the target makes a big difference.</li>
+        <li>Mount the phone firmly. Auto mode waits for the view to settle before scoring.</li>
+        <li>Anything missed or misplaced: drag the marker, or use ＋ Add and Delete.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-tab="shoot" class="active">Shoot</button>
+  <button data-tab="history">History</button>
+  <button data-tab="settings">Settings</button>
+</nav>
+
+<dialog id="dlg"><div id="dlgBody"></div></dialog>
+<div class="toast" id="toast" hidden></div>
+<video id="video" playsinline muted></video>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
