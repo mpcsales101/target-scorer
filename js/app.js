@@ -30,6 +30,7 @@ const S = {
   mode: 'idle', calib: null, auto: false, pending: [], quiet: 0, busy: false,
   zoom: 1, center: null, vf: null, drag: null, pan: null, dirty: true,
   camZ: 1, hwMin: 1, hwMax: 1, dz: 1, pinch: null, tap: null,
+  aiming: false, aimSel: [], aimPrev: null,
 };
 const pointers = new Map();
 const cardProfile = () => profileById(S.card.profileId);
@@ -129,17 +130,73 @@ function sortBulls(bs) {
 }
 
 // ---------- Calibration ----------
-async function findTarget() {
+// ---------- Full-screen aiming ----------
+// Find target opens the camera full screen. Zoom in, tap the target (or centre it),
+// then Enter locks on and returns to the main screen.
+function enterAim() {
   if (!S.src) return toast('Start the camera, load photos or try the demo first');
+  if (S.aiming) return;
+  S.aimPrev = S.bulls.length ? { bulls: S.bulls, ref: S.ref, roiOff: S.roiOff, roiSize: S.roiSize } : null;
+  S.bulls = []; S.ref = null; S.auto = false; S.pending = []; S.zoom = 1;
+  S.aimSel = []; S.aiming = true; S.mode = 'aim'; S.calib = null;
+  hideBanner();
+  document.body.classList.add('aiming');
+  document.documentElement.requestFullscreen?.().catch(() => {});
+  history.pushState({ aim: true }, '');
+  aimMessage();
+  updatePill(); updateButtons(); sizeView(); requestRender();
+}
+
+function exitAim(cancelled) {
+  if (!S.aiming) return;
+  if (cancelled && S.aimPrev) Object.assign(S, S.aimPrev);
+  S.aiming = false; S.aimPrev = null; S.aimSel = [];
+  S.mode = 'idle'; S.calib = null;
+  hideBanner();
+  document.body.classList.remove('aiming');
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if (history.state?.aim) history.back();
+  if (cancelled && !S.bulls.length) status('Not locked on. Tap Find target to aim.');
+  updatePill(); updateButtons(); sizeView(); updatePanels(); requestRender();
+  window.scrollTo(0, 0);
+}
+
+function aimMessage(msg) {
+  const p = profile(), n = S.aimSel.length;
+  $('#aimMsg').textContent = msg || (!p.black
+    ? 'Zoom in on the target, then press Enter'
+    : n >= p.bulls ? 'Target selected. Press Enter'
+    : p.bulls > 1 ? `Zoom in and tap each bull (${n} of ${p.bulls}), then Enter`
+    : 'Zoom in, tap the target (or centre it), then Enter');
+}
+
+async function aimTap(fx, fy) {
   const p = profile();
-  if (!p.black) return startCalib();
-  // Search what's on screen, so zooming in and centring the target picks the right one.
-  const area = S.bulls.length ? { x: 0, y: 0, w: S.src.w, h: S.src.h } : aimRegion();
-  const cands = V.findDarkBlobs(grabGray(area, Math.max(1, area.w / 640)), p.bulls);
-  const bulls = cands.map(c => refineAt(c.x, c.y, c.r, p.black / 2)).filter(Boolean);
+  if (!p.black) return aimMessage('This target is calibrated by hand: press Enter first');
+  const hit = S.aimSel.findIndex(b => Math.hypot(b.cx - fx, b.cy - fy) < (b.a + b.b) / 2);
+  if (hit >= 0) { S.aimSel.splice(hit, 1); aimMessage(); requestRender(); return; }
+  const span = Math.min(S.src.w, S.src.h) * 0.35;
+  const g = grabGray({ x: fx - span, y: fy - span, w: 2 * span, h: 2 * span }, Math.max(1, (2 * span) / 500));
+  const blob = V.darkBlobAt(g, fx, fy);
+  const b = blob && refineAt(blob.x, blob.y, blob.r, p.black / 2);
+  if (!b) return aimMessage("Couldn't find a black aiming mark there. Zoom in more and tap right on it.");
+  if (p.bulls === 1) S.aimSel = [b];
+  else if (S.aimSel.length < p.bulls) S.aimSel.push(b);
+  aimMessage(); requestRender();
+}
+
+async function aimEnter() {
+  const p = profile();
+  if (!p.black) { startCalib(); return; } // tap centre + ring, still full screen
+  let bulls = S.aimSel;
   if (bulls.length < p.bulls) {
-    startCalib();
-    toast("Couldn't lock on automatically. Tap the black aiming mark.");
+    // Nothing tapped: look for the target in what's on screen, favouring the centre.
+    const area = aimRegion();
+    const cands = V.findDarkBlobs(grabGray(area, Math.max(1, area.w / 640)), p.bulls);
+    bulls = cands.map(c => refineAt(c.x, c.y, c.r, p.black / 2)).filter(Boolean);
+  }
+  if (bulls.length < p.bulls) {
+    aimMessage("Couldn't find the target. Zoom in and tap on the black aiming mark, then Enter.");
     return;
   }
   await setCalibration(sortBulls(bulls));
@@ -148,13 +205,16 @@ async function findTarget() {
 function startCalib() {
   const p = profile();
   S.mode = 'calib';
+  if (S.aiming) aimMessage('Tap the centre, then the ring line');
   S.calib = { kind: p.black ? 'black' : 'manual', bulls: [], centres: [] };
   S.bulls = []; S.ref = null; S.zoom = 1; S.auto = false;
   updatePill(); showBanner(); updateButtons(); sizeView(); requestRender();
 }
 
 function cancelCalib() {
-  S.mode = 'idle'; S.calib = null; hideBanner(); updateButtons(); requestRender();
+  S.mode = S.aiming ? 'aim' : 'idle'; S.calib = null; hideBanner();
+  if (S.aiming) aimMessage();
+  updateButtons(); requestRender();
 }
 
 function calibRadiusMm() {
@@ -208,6 +268,7 @@ async function setCalibration(bulls) {
   else status(`Locked on · holes ≈ ${hp.toFixed(0)} px wide. Shoot, then tap Score shot (or turn on Auto).`, 'ok');
   updatePill(); updateButtons(); sizeView(); requestRender();
   if (settings.lock) applyLock(true);
+  if (S.aiming) exitAim(false);
 }
 
 async function setReference() {
@@ -417,6 +478,7 @@ async function startCamera() {
     await setupCameraControls();
     afterSourceChange();
     status('Zoom in (pinch or the zoom bar) until the target fills the circle, then tap Find target.');
+    enterAim();
   } catch (e) {
     toast('Camera unavailable: ' + e.message);
   }
@@ -457,6 +519,7 @@ function setZoom(z, unlock = false) {
   z = clamp(z, 1, maxZoom());
   if (unlock && S.bulls.length) reaim('Zoom changed. Centre the target and tap Find target.');
   S.camZ = z;
+  if (S.aimSel?.length) { S.aimSel = []; aimMessage(); }
   const hwRange = S.src?.kind === 'camera' ? S.hwMax / S.hwMin : 1;
   const hw = Math.min(z, hwRange);
   S.dz = z / hw;
@@ -469,7 +532,13 @@ function setZoom(z, unlock = false) {
 
 // The part of the frame shown while aiming (centre crop for digital zoom).
 function aimRegion() {
-  const w = S.src.w / S.dz, h = S.src.h / S.dz;
+  let w = S.src.w / S.dz, h = S.src.h / S.dz;
+  // Full-screen aiming fills the screen (crop, not letterbox), so what you see is what's searched.
+  const cv = $('#view');
+  if (S.aiming && cv.clientWidth && cv.clientHeight) {
+    const A = cv.clientWidth / cv.clientHeight;
+    if (w / h > A) w = h * A; else h = w / A;
+  }
   return { x: (S.src.w - w) / 2, y: (S.src.h - h) / 2, w, h };
 }
 
@@ -508,7 +577,8 @@ async function loadPhotos(files) {
   S.photos = imgs;
   showPhoto(0);
   afterSourceChange();
-  status(`${imgs.length} photo(s). Tap Find target on the first, then Score shot to step through the rest.`);
+  status(`${imgs.length} photo(s). Score shot steps through them.`);
+  enterAim();
 }
 
 function showPhoto(i) {
@@ -523,7 +593,8 @@ function startDemo() {
   S.demo = new DemoRange(profile(), { pelletD: settings.pellet, sway: 0.6 });
   S.src = { kind: 'demo', el: S.demo.canvas, w: S.demo.o.w, h: S.demo.o.h };
   afterSourceChange();
-  status('Demo range: zoom in on the target, tap Find target, then Fire demo shot and Score shot.');
+  status('Demo range: Fire demo shot, then Score shot (or turn on Auto).');
+  enterAim();
 }
 
 function updateSourceUI() {
@@ -622,6 +693,11 @@ function drawOverlay(ctx, f, still = false) {
     ctx.moveTo(cx - rr - 14, cy); ctx.lineTo(cx - rr + 10, cy); ctx.moveTo(cx + rr - 10, cy); ctx.lineTo(cx + rr + 14, cy);
     ctx.moveTo(cx, cy - rr - 14); ctx.lineTo(cx, cy - rr + 10); ctx.moveTo(cx, cy + rr - 10); ctx.lineTo(cx, cy + rr + 14);
     ctx.stroke();
+  }
+  if (!still) for (const b of S.aimSel) {
+    const [x, y] = toScreen(f, b.cx, b.cy);
+    ctx.strokeStyle = '#48d17a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(x, y, b.a * f.sc, b.b * f.sc, b.theta, 0, 2 * Math.PI); ctx.stroke();
   }
   if (!still) {
     ctx.setLineDash([3, 3]); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
@@ -729,7 +805,9 @@ function updateButtons() {
   $('#btnAuto').setAttribute('aria-pressed', String(S.auto));
   $('#btnZoom').textContent = '🔍 ' + (Math.round(S.zoom * 10) / 10) + '×';
   const locked = S.bulls.length > 0;
-  $('#zoomBar').hidden = !S.src || locked || S.mode === 'calib';
+  $('#zoomBar').hidden = !S.aiming || S.mode === 'calib';
+  $('#aimTop').hidden = !S.aiming;
+  $('#aimEnter').hidden = !S.aiming || S.mode === 'calib';
   $('#btnReaim').hidden = !locked;
   $('#btnZoom').hidden = !locked;
   $('#btnEnd').disabled = !S.session;
@@ -772,7 +850,7 @@ function setupPointer() {
     }
     if (pointers.size > 2) return;
     // Taps (calibration, adding a shot) are handled on release so a pinch never counts as one.
-    if (S.mode === 'calib' || S.mode === 'add') { S.tap = [sx, sy]; return; }
+    if (S.mode === 'calib' || S.mode === 'add' || S.mode === 'aim') { S.tap = [sx, sy]; return; }
     const hit = hitShot(sx, sy);
     if (hit) {
       const b = S.bulls[hit.bull];
@@ -818,6 +896,7 @@ function setupPointer() {
     if (e.type === 'pointerup' && S.tap && S.vf) {
       const [fx, fy] = toFrame(S.vf, S.tap[0], S.tap[1]);
       if (S.mode === 'calib') onCalibTap(fx, fy);
+      else if (S.mode === 'aim') aimTap(fx, fy);
       else if (S.mode === 'add') {
         const s = addShotAtFrame(fx, fy, false);
         S.sel = s && s.id; S.mode = 'idle';
@@ -981,7 +1060,10 @@ function init() {
   for (const id of ['#btnDemo', '#btnDemo2']) $(id).onclick = startDemo;
   for (const id of ['#photoIn', '#photoIn2']) $(id).onchange = e => { loadPhotos([...e.target.files]); e.target.value = ''; };
 
-  $('#btnFind').onclick = findTarget;
+  $('#btnFind').onclick = enterAim;
+  $('#aimEnter').onclick = aimEnter;
+  $('#aimCancel').onclick = () => exitAim(true);
+  window.addEventListener('popstate', () => { if (S.aiming) exitAim(true); }); // phone back button
   $('#btnScore').onclick = () => scoreNow(false);
   $('#btnAuto').onclick = async () => {
     if (!S.bulls.length) return toast('Lock on to the target first');
@@ -1047,7 +1129,7 @@ function init() {
   $('#zSlider').oninput = e => setZoom(Math.exp((+e.target.value / 1000) * Math.log(maxZoom())), true);
   $('#zMinus').onclick = () => zStep(1 / 1.25);
   $('#zPlus').onclick = () => zStep(1.25);
-  $('#btnReaim').onclick = () => reaim();
+  $('#btnReaim').onclick = enterAim;
   $('#lockIn').onchange = e => { settings.lock = e.target.checked; saveSettings(); applyLock(settings.lock); };
   $('#video').addEventListener('resize', () => {
     const v = $('#video');
