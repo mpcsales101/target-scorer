@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Bump VERSION when files change.
-const VERSION = 'ts-v4';
+const VERSION = 'ts-v5';
 const FILES = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/app.js', 'js/vision.js', 'js/scoring.js', 'js/targets.js', 'js/store.js', 'js/demo.js',

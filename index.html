@@ -19,43 +19,48 @@
 <main>
   <!-- SHOOT -->
   <section class="tab active" id="tab-shoot">
-    <div class="setup">
-      <select id="profileSel" aria-label="Target"></select>
-      <select id="calibreSel" aria-label="Calibre">
-        <option value="4.5">.177 (4.5 mm)</option>
-        <option value="5.5">.22 (5.5 mm)</option>
-      </select>
+    <div class="setupcard" id="setupCard">
+      <div class="sum">
+        <span class="lbl">Target</span>
+        <b id="sumTarget"></b>
+        <small id="sumCal"></small>
+      </div>
+      <button id="btnSetup">Change</button>
     </div>
 
     <div class="viewwrap">
       <canvas id="view"></canvas>
       <div class="empty" id="empty">
-        <p>Point your phone at the target from the firing line.</p>
-        <div class="row">
-          <button class="accent" id="btnCam">Start camera</button>
-          <label class="btn">Photos<input type="file" accept="image/*" multiple id="photoIn" hidden></label>
-          <button id="btnDemo">Try demo</button>
-        </div>
+        <div class="bigicon" aria-hidden="true">🎯</div>
+        <h2>Set up your target</h2>
+        <p>Three quick steps: choose the target, choose the camera, then aim.</p>
+        <button class="accent huge" id="btnStart">Start setup</button>
       </div>
       <div class="aimtop" id="aimTop" hidden>
-        <button id="aimCancel">Cancel</button>
-        <span id="aimMsg"></span>
-        <button id="aimLens" hidden>📷 Lens</button>
+        <div class="aimrow">
+          <button class="pillbtn" id="aimCancel">‹ Back</button>
+          <span class="kicker">Step 3 of 3 · Aim</span>
+          <button class="pillbtn" id="aimLens" hidden>🔭 Lens</button>
+        </div>
+        <ol class="aimsteps" id="aimSteps"></ol>
+        <div class="aimmsg" id="aimMsg"></div>
       </div>
       <div class="banner" id="banner" hidden></div>
-      <button class="accent aimenter" id="aimEnter" hidden>Enter</button>
+      <button class="accent aimenter" id="aimEnter" hidden>Enter ✓</button>
       <div class="zoombar" id="zoomBar" hidden>
         <button id="zMinus" aria-label="Zoom out">−</button>
-        <input type="range" id="zSlider" min="0" max="1000" value="0" aria-label="Camera zoom">
+        <div class="zmid">
+          <output id="zOut">1.0×</output>
+          <input type="range" id="zSlider" min="0" max="1000" value="0" aria-label="Camera zoom">
+        </div>
         <button id="zPlus" aria-label="Zoom in">+</button>
-        <output id="zOut">1.0×</output>
       </div>
       <div class="viewtools">
-        <button id="btnReaim" hidden>Re-aim</button>
+        <button id="btnReaim" hidden>Aim again</button>
         <button id="btnZoom" title="Magnify" hidden>🔍 1×</button>
       </div>
     </div>
-    <div class="status" id="status">Start the camera, load photos, or try the demo range.</div>
+    <div class="status" id="status">Tap Start setup to begin.</div>
 
     <div class="readout">
       <div><span>Last</span><b id="rLast">–</b></div>
@@ -63,18 +68,22 @@
       <div><span>Shots</span><b id="rCount">0</b></div>
     </div>
 
-    <div class="actions">
-      <button id="btnFind">Find target</button>
-      <button class="accent big" id="btnScore">Score shot</button>
+    <button class="accent huge" id="btnScore">Score shot</button>
+    <div class="actions3">
       <button class="toggle" id="btnAuto" aria-pressed="false">Auto</button>
-    </div>
-    <div class="actions small">
+      <button id="btnUndo" disabled>↶ Undo</button>
       <button id="btnAdd">＋ Add</button>
-      <button id="btnDel" disabled>Delete</button>
-      <button id="btnUndo" disabled>Undo</button>
-      <button id="btnRef" title="Re-take the reference image without scoring">Reset ref</button>
-      <button id="btnFire" hidden>Fire demo shot</button>
     </div>
+    <button class="big wide" id="btnFire" hidden>💥 Fire demo shot</button>
+    <details class="more">
+      <summary>More options</summary>
+      <div class="actions small">
+        <button id="btnDel" disabled>Delete selected</button>
+        <button id="btnRef" title="Re-take the reference image without scoring">Reset reference</button>
+        <button id="btnFind">Aim again</button>
+      </div>
+      <p class="hint">Tap a marker to select it, drag it to move it.</p>
+    </details>
 
     <div class="grid2">
       <div class="panel plotwrap"><canvas id="plot"></canvas></div>
@@ -165,6 +174,42 @@
   <button data-tab="history">History</button>
   <button data-tab="settings">Settings</button>
 </nav>
+
+<div class="wizard" id="wizard" hidden>
+  <div class="wzhead">
+    <button class="wzicon" id="wzBack" aria-label="Back">‹</button>
+    <div class="dots"><i></i><i></i><i></i></div>
+    <button class="wzicon" id="wzClose" aria-label="Close">✕</button>
+  </div>
+  <section class="wzstep" data-step="1">
+    <p class="kicker">Step 1 of 3</p>
+    <h2>What are you shooting at?</h2>
+    <div class="tiles" id="wzTargets"></div>
+    <h3>Pellet size</h3>
+    <div class="seg" id="wzCal">
+      <button data-cal="4.5">.177<small>4.5 mm</small></button>
+      <button data-cal="5.5">.22<small>5.5 mm</small></button>
+    </div>
+    <button class="accent huge" id="wzNext">Next ›</button>
+    <p class="hint">Club target not listed? Add it in Settings → Custom targets.</p>
+  </section>
+  <section class="wzstep" data-step="2" hidden>
+    <p class="kicker">Step 2 of 3</p>
+    <h2>Set up the camera</h2>
+    <ol class="wztips">
+      <li>Stand at the firing line.</li>
+      <li>Rest the phone on something steady, pointing at the target.</li>
+      <li>Tap <b>Use the camera</b> and allow camera access.</li>
+    </ol>
+    <button class="accent huge" id="btnCam">📷 Use the camera</button>
+    <button class="huge" id="wzLens">🔭 Choose lens (telephoto)</button>
+    <button class="huge" id="wzKeep" hidden>Keep current camera ›</button>
+    <div class="row2">
+      <label class="btn big">🖼 Use photos<input type="file" accept="image/*" multiple id="photoIn" hidden></label>
+      <button class="big" id="btnDemo">🎯 Try demo</button>
+    </div>
+  </section>
+</div>
 
 <dialog id="dlg"><div id="dlgBody"></div></dialog>
 <div class="toast" id="toast" hidden></div>

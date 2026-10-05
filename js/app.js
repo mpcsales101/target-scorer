@@ -130,15 +130,58 @@ function sortBulls(bs) {
 }
 
 // ---------- Calibration ----------
+// ---------- Setup wizard ----------
+// Step 1: target and pellet. Step 2: camera. Step 3 is the full-screen aiming view.
+function openWizard(step = 1) {
+  fillProfileSelect();
+  $('#wizard').hidden = false;
+  document.body.classList.add('wz');
+  showStep(step);
+}
+
+function closeWizard() {
+  $('#wizard').hidden = true;
+  document.body.classList.remove('wz');
+}
+
+function showStep(n) {
+  S.wzStep = n;
+  document.querySelectorAll('.wzstep').forEach(el => { el.hidden = +el.dataset.step !== n; });
+  document.querySelectorAll('.dots i').forEach((d, i) => d.classList.toggle('on', i < n));
+  $('#wzKeep').hidden = !S.src;
+  $('#wizard').scrollTop = 0;
+}
+
+async function changeProfile(id) {
+  if (id === settings.profileId) return;
+  if (S.card.shots.length && !confirm('Switching target starts a new session. Continue?')) return;
+  if (S.session) await endSession();
+  settings.profileId = id; saveSettings();
+  S.card = newCard(); S.bulls = []; S.ref = null; S.auto = false;
+  if (S.src?.kind === 'demo') { S.demo = new DemoRange(profile(), { pelletD: settings.pellet, sway: 0.6 }); S.src.el = S.demo.canvas; }
+  fillProfileSelect();
+  updatePill(); updatePanels(); sizeView(); requestRender();
+}
+
+function changeCalibre(v) {
+  settings.pellet = v; saveSettings();
+  S.card.pellet = v;
+  S.card.shots.forEach(rescore);
+  if (S.card.shots.length) persist();
+  fillProfileSelect(); updatePanels(); requestRender();
+}
+
 // ---------- Full-screen aiming ----------
 // Find target opens the camera full screen. Zoom in, tap the target (or centre it),
 // then Enter locks on and returns to the main screen.
 function enterAim() {
-  if (!S.src) return toast('Start the camera, load photos or try the demo first');
+  if (!S.src) return toast('Tap Start setup first');
   if (S.aiming) return;
   S.aimPrev = S.bulls.length ? { bulls: S.bulls, ref: S.ref, roiOff: S.roiOff, roiSize: S.roiSize } : null;
   S.bulls = []; S.ref = null; S.auto = false; S.pending = []; S.zoom = 1;
   S.aimSel = []; S.aiming = true; S.mode = 'aim'; S.calib = null;
+  S.fromWizard = !$('#wizard').hidden;
+  closeWizard();
   hideBanner();
   document.body.classList.add('aiming');
   document.documentElement.requestFullscreen?.().catch(() => {});
@@ -156,18 +199,27 @@ function exitAim(cancelled) {
   document.body.classList.remove('aiming');
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   if (history.state?.aim) history.back();
-  if (cancelled && !S.bulls.length) status('Not locked on. Tap Find target to aim.');
+  if (cancelled && !S.bulls.length) status('Not locked on yet. Tap Aim again under More options, or Change to restart setup.');
+  if (!cancelled) toast('✓ Locked on. Shoot, then press Score shot.');
+  if (cancelled && S.fromWizard && !S.bulls.length) openWizard(2);
+  S.fromWizard = false;
   updatePill(); updateButtons(); sizeView(); updatePanels(); requestRender();
   window.scrollTo(0, 0);
 }
 
 function aimMessage(msg) {
-  const p = profile(), n = S.aimSel.length;
-  $('#aimMsg').textContent = msg || (!p.black
-    ? 'Zoom in on the target, then press Enter'
-    : n >= p.bulls ? 'Target selected. Press Enter'
-    : p.bulls > 1 ? `Zoom in and tap each bull (${n} of ${p.bulls}), then Enter`
-    : 'Zoom in, tap the target (or centre it), then Enter');
+  const p = profile(), n = S.aimSel.length, done = p.black && n >= p.bulls;
+  const steps = [
+    'Zoom in until the target fills the screen',
+    !p.black ? 'Press Enter, then tap the centre and a ring line'
+      : p.bulls > 1 ? `Tap each black bull (${n} of ${p.bulls})` : 'Tap the black centre of the target',
+    'Press Enter',
+  ];
+  const active = done ? 2 : !p.black ? (S.camZ > 1.3 ? 1 : 0) : S.camZ > 1.3 || n ? 1 : 0;
+  $('#aimSteps').innerHTML = steps.map((t, i) => `<li class="${i < active ? 'done' : i === active ? 'on' : ''}">${esc(t)}</li>`).join('');
+  $('#aimMsg').textContent = msg || (done ? '✓ Target found' : '');
+  $('#aimMsg').classList.toggle('ok', !msg && done);
+  $('#aimEnter').classList.toggle('ready', done);
 }
 
 async function aimTap(fx, fy) {
@@ -311,8 +363,8 @@ function addShotAtFrame(fx, fy, auto = false) {
 }
 
 async function scoreNow(auto = false) {
-  if (!S.src) return toast('Start the camera, load photos or try the demo first');
-  if (!S.bulls.length) return toast('Lock on to the target first (Find target)');
+  if (!S.src) return openWizard(1);
+  if (!S.bulls.length) return enterAim();
   if (S.busy) return;
   S.busy = true;
   try {
@@ -430,7 +482,7 @@ async function newCardAction() {
   S.card = newCard(); S.lastId = null; S.sel = null;
   if (S.bulls.length) { track(true); await setReference(); }
   updatePanels(); requestRender();
-  toast('New card. Hang it before scoring; if it moved, tap Find target.');
+  toast('New card ready. If the target moved, use More options → Aim again.');
 }
 
 async function endSession() {
@@ -478,7 +530,7 @@ async function startCamera() {
     await setupCameraControls();
     afterSourceChange();
     if (S.aiming) { S.mode = 'aim'; S.aimPrev = null; aimMessage(); updateButtons(); }
-    status('Zoom in (pinch or the zoom bar) until the target fills the circle, then tap Find target.');
+    status('Camera ready.');
     enterAim();
   } catch (e) {
     toast('Camera unavailable: ' + e.message);
@@ -593,9 +645,10 @@ function applyHwZoom(z) {
 
 function setZoom(z, unlock = false) {
   z = clamp(z, 1, maxZoom());
-  if (unlock && S.bulls.length) reaim('Zoom changed. Centre the target and tap Find target.');
+  if (unlock && S.bulls.length) reaim('Zoom changed. Use Aim again to lock on.');
   S.camZ = z;
-  if (S.aimSel?.length) { S.aimSel = []; aimMessage(); }
+  if (S.aimSel?.length) S.aimSel = [];
+  if (S.aiming) aimMessage();
   const hwRange = S.src?.kind === 'camera' ? S.hwMax / S.hwMin : 1;
   const hw = Math.min(z, hwRange);
   S.dz = z / hw;
@@ -618,7 +671,7 @@ function aimRegion() {
   return { x: (S.src.w - w) / 2, y: (S.src.h - h) / 2, w, h };
 }
 
-function reaim(msg = 'Zoom in, put the target in the circle, then tap Find target.') {
+function reaim(msg = 'Use Aim again to lock on.') {
   S.bulls = []; S.ref = null; S.auto = false; S.pending = []; S.zoom = 1;
   S.mode = 'idle'; S.calib = null; hideBanner();
   status(msg, 'warn');
@@ -1067,8 +1120,15 @@ function download(name, text, type) {
 }
 
 // ---------- Settings ----------
+const describe = p => !p.rings.length ? 'Any target: marks holes and groups, no score'
+  : `${p.rings.length} rings${p.black ? ', black aiming mark' : ', calibrate by tapping'}${p.bulls > 1 ? `, ${p.bulls} bulls` : ''}`;
+
 function fillProfileSelect() {
-  $('#profileSel').innerHTML = allProfiles().map(p => `<option value="${p.id}" ${p.id === settings.profileId ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  $('#wzTargets').innerHTML = allProfiles().map(p =>
+    `<button class="tile ${p.id === settings.profileId ? 'sel' : ''}" data-id="${p.id}"><b>${esc(p.name)}</b><small>${esc(describe(p))}</small></button>`).join('');
+  document.querySelectorAll('#wzCal button').forEach(b => b.classList.toggle('sel', +b.dataset.cal === settings.pellet));
+  $('#sumTarget').textContent = profile().name;
+  $('#sumCal').textContent = settings.pellet === 5.5 ? '.22 pellets' : '.177 pellets';
   $('#customList').innerHTML = custom.map(p => `<div class="srow"><span>${esc(p.name)} · ${p.rings.length} rings${p.bulls > 1 ? ` · ${p.bulls} bulls` : ''}</span><button class="danger chip" data-del="${p.id}">Remove</button></div>`).join('');
 }
 
@@ -1128,7 +1188,6 @@ function showTab(name) {
 
 function init() {
   fillProfileSelect();
-  $('#calibreSel').value = String(settings.pellet);
   setupSettings();
   setupPointer();
 
@@ -1143,14 +1202,14 @@ function init() {
   window.addEventListener('popstate', () => { if (S.aiming) exitAim(true); }); // phone back button
   $('#btnScore').onclick = () => scoreNow(false);
   $('#btnAuto').onclick = async () => {
-    if (!S.bulls.length) return toast('Lock on to the target first');
+    if (!S.bulls.length) return toast('Set up the target first: tap Start setup');
     if (S.src.kind === 'photo') return toast('Auto mode needs the live camera');
     S.auto = !S.auto; S.pending = [];
     if (S.auto) { await setReference(); status('Auto: watching for new holes…', 'ok'); } else status('Auto off. Tap Score shot after each shot.');
     updateButtons(); requestRender();
   };
   $('#btnAdd').onclick = () => {
-    if (!S.bulls.length) return toast('Lock on to the target first');
+    if (!S.bulls.length) return toast('Set up the target first: tap Start setup');
     S.mode = S.mode === 'add' ? 'idle' : 'add';
     if (S.mode === 'add') toast('Tap the hole on the camera view (use 🔍 to magnify)');
     updateButtons();
@@ -1170,7 +1229,7 @@ function init() {
     persist(); updatePanels(); requestRender();
   };
   $('#btnRef').onclick = async () => {
-    if (!S.bulls.length) return toast('Lock on to the target first');
+    if (!S.bulls.length) return toast('Set up the target first: tap Start setup');
     track(true); await setReference(); toast('Reference updated: existing holes will be ignored');
   };
   $('#btnFire').onclick = () => { S.demo?.fire(); requestRender(); };
@@ -1185,22 +1244,15 @@ function init() {
   });
   $('#sessList').addEventListener('click', e => { const b = e.target.closest('.sess'); if (b) openSession(b.dataset.id); });
 
-  $('#profileSel').onchange = async e => {
-    if (S.card.shots.length && !confirm('Switching target starts a new session. Continue?')) { e.target.value = settings.profileId; return; }
-    if (S.session) await endSession();
-    settings.profileId = e.target.value; saveSettings();
-    S.card = newCard(); S.bulls = []; S.ref = null; S.auto = false;
-    if (S.src?.kind === 'demo') startDemo();
-    updatePill(); updatePanels(); sizeView(); requestRender();
-    if (S.src) status(profile().black ? 'Tap Find target to lock on.' : 'This target has no black aiming mark. Tap Find target to calibrate by hand.');
-  };
-  $('#calibreSel').onchange = e => {
-    settings.pellet = +e.target.value; saveSettings();
-    S.card.pellet = settings.pellet;
-    S.card.shots.forEach(rescore);
-    if (S.card.shots.length) persist();
-    updatePanels(); requestRender();
-  };
+  $('#wzTargets').addEventListener('click', e => { const t = e.target.closest('.tile'); if (t) changeProfile(t.dataset.id); });
+  $('#wzCal').addEventListener('click', e => { const b = e.target.closest('button'); if (b) changeCalibre(+b.dataset.cal); });
+  $('#wzNext').onclick = () => showStep(2);
+  $('#wzBack').onclick = () => (S.wzStep > 1 ? showStep(S.wzStep - 1) : closeWizard());
+  $('#wzClose').onclick = closeWizard;
+  $('#wzLens').onclick = chooseLens;
+  $('#wzKeep').onclick = () => enterAim();
+  $('#btnStart').onclick = () => openWizard(1);
+  $('#btnSetup').onclick = () => openWizard(1);
   $('#camSel').onchange = e => { settings.camId = e.target.value; saveSettings(); startCamera(); };
   const zStep = f => setZoom(S.camZ * f, true);
   $('#zSlider').oninput = e => setZoom(Math.exp((+e.target.value / 1000) * Math.log(maxZoom())), true);
@@ -1215,7 +1267,7 @@ function init() {
     if (S.src?.kind === 'camera' && (v.videoWidth !== S.src.w || v.videoHeight !== S.src.h)) {
       S.src.w = v.videoWidth; S.src.h = v.videoHeight;
       afterSourceChange();
-      status('Camera view changed. Tap Find target again.', 'warn');
+      status('Camera view changed. Use Aim again to lock on.', 'warn');
     }
   });
   window.addEventListener('resize', () => { sizeView(); requestRender(); updatePanels(); });

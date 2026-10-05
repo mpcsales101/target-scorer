@@ -14,7 +14,7 @@ export const BUILTIN = [
     innerTen: null, black: 30.5, bulls: 1, card: 80, decimals: true,
   },
   {
-    id: 'holes-only', name: 'Any target (holes and groups only)', builtin: true, top: 0,
+    id: 'holes-only', name: 'Other target (no scoring)', builtin: true, top: 0,
     rings: [], innerTen: null, black: null, bulls: 1, card: 170, decimals: false,
   },
 ];

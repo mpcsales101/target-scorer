@@ -35,7 +35,7 @@ main { max-width: 760px; margin: 0 auto; padding: 12px 16px; }
 .setup { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 10px; }
 select, input[type=number], input:not([type]) { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; width: 100%; }
 
-button, .btn { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; user-select: none; }
+button, .btn { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 52px; font-size: 16px; font-weight: 600; user-select: none; }
 button:active:not(:disabled), .btn:active { transform: translateY(1px); }
 button:disabled { opacity: .4; cursor: default; }
 button.accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
@@ -51,10 +51,6 @@ button.toggle[aria-pressed=true], button.on { background: rgba(255,184,0,.16); b
 .banner select, .banner input { width: auto; flex: 1 1 160px; padding: 8px; }
 .banner button { min-height: 36px; padding: 6px 12px; }
 .viewtools { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
-.zoombar { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 12px; background: rgba(15,17,19,.82); }
-.zoombar button { min-height: 40px; min-width: 44px; padding: 0; font-size: 22px; background: transparent; }
-.zoombar input { flex: 1; }
-.zoombar output { min-width: 46px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--accent); }
 .viewtools button { min-height: 36px; padding: 4px 10px; background: rgba(15,17,19,.8); }
 
 .status { margin: 8px 2px; color: var(--muted); font-size: 13px; min-height: 18px; }
@@ -137,12 +133,6 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
 body.aiming { overflow: hidden; }
 body.aiming .viewwrap { position: fixed; inset: 0; z-index: 30; border: 0; border-radius: 0; }
 body.aiming #view { height: 100vh !important; height: 100dvh !important; max-height: none; }
-.aimtop { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 10px; padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: linear-gradient(rgba(0,0,0,.75), rgba(0,0,0,0)); }
-.aimtop span { flex: 1; font-weight: 600; text-shadow: 0 1px 3px #000; }
-.aimtop button { min-height: 40px; background: rgba(15,17,19,.8); }
-body.aiming .banner { top: calc(64px + env(safe-area-inset-top)); }
-.aimenter { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom)); min-width: 180px; min-height: 54px; font-size: 18px; border-radius: 14px; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
-body.aiming .zoombar { bottom: calc(12px + env(safe-area-inset-bottom)); }
 
 /* Lens picker */
 .lensgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
@@ -150,3 +140,71 @@ body.aiming .zoombar { bottom: calc(12px + env(safe-area-inset-bottom)); }
 .lens canvas { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: #000; display: block; }
 .lens small { color: var(--muted); font-size: 11px; line-height: 1.3; word-break: break-word; }
 .lens.sel { border-color: var(--accent); }
+
+/* ---------- Simple, big-button layout ---------- */
+.huge { width: 100%; min-height: 66px; font-size: 20px; font-weight: 700; border-radius: 16px; }
+.big { min-height: 58px; font-size: 17px; }
+.wide { width: 100%; margin-bottom: 10px; }
+#btnScore { margin-bottom: 10px; font-size: 22px; min-height: 76px; }
+.actions3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+.actions3 button { min-height: 60px; font-size: 16px; }
+.more { margin: 4px 0 12px; }
+.more summary { padding: 14px 4px; font-size: 16px; }
+.more .actions { margin-top: 4px; }
+.setupcard { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 10px 14px; margin-bottom: 10px; }
+.setupcard .sum { flex: 1; min-width: 0; }
+.setupcard .lbl { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.setupcard b { display: block; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.setupcard small { color: var(--muted); }
+.empty h2 { margin: 0; font-size: 22px; }
+.empty p { max-width: 320px; }
+.empty .huge { max-width: 320px; }
+.bigicon { font-size: 44px; line-height: 1; }
+.status { font-size: 15px; }
+
+/* Setup wizard */
+.wizard { position: fixed; inset: 0; z-index: 35; background: var(--bg); overflow-y: auto; padding: calc(8px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+.wizard > section { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.wizard h2 { margin: 0 0 4px; font-size: 26px; line-height: 1.2; }
+.wizard h3 { margin: 10px 0 0; font-size: 14px; }
+.wzhead { display: flex; align-items: center; justify-content: space-between; max-width: 560px; margin: 0 auto 8px; }
+.wzicon { min-width: 52px; font-size: 24px; padding: 0; background: transparent; border-color: transparent; }
+.dots { display: flex; gap: 8px; }
+.dots i { width: 28px; height: 6px; border-radius: 3px; background: var(--line); }
+.dots i.on { background: var(--accent); }
+.kicker { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.tiles { display: flex; flex-direction: column; gap: 10px; }
+.tile { flex-direction: column; align-items: flex-start; text-align: left; min-height: 74px; padding: 14px 16px; border-width: 2px; }
+.tile b { font-size: 18px; }
+.tile small { color: var(--muted); font-weight: 400; font-size: 14px; }
+.tile.sel { border-color: var(--accent); background: rgba(255,184,0,.1); }
+.tile.sel b::before { content: '✓ '; color: var(--accent); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.seg button { flex-direction: column; min-height: 70px; font-size: 22px; border-width: 2px; gap: 0; }
+.seg button small { font-size: 13px; color: var(--muted); font-weight: 400; }
+.seg button.sel { border-color: var(--accent); background: rgba(255,184,0,.1); color: var(--accent); }
+.wztips { margin: 0 0 6px; padding-left: 22px; font-size: 17px; line-height: 1.5; color: var(--text); }
+.wizard .row2 .btn, .wizard .row2 button { width: 100%; }
+.wizard .hint { text-align: center; font-size: 13px; }
+
+/* Full-screen aiming */
+.aimtop { position: absolute; left: 0; right: 0; top: 0; padding: calc(10px + env(safe-area-inset-top)) 12px 18px; background: linear-gradient(rgba(0,0,0,.85) 70%, rgba(0,0,0,0)); }
+.aimrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pillbtn { min-height: 46px; padding: 8px 14px; background: rgba(40,44,48,.9); }
+.aimsteps { margin: 10px 0 0; padding-left: 26px; font-size: 18px; line-height: 1.45; text-shadow: 0 1px 3px #000; }
+.aimsteps li { color: #c9ced3; }
+.aimsteps li.on { color: #fff; font-weight: 700; }
+.aimsteps li.on::marker { color: var(--accent); }
+.aimsteps li.done { color: var(--good); }
+.aimmsg { margin-top: 6px; font-size: 16px; font-weight: 700; color: var(--warn); text-shadow: 0 1px 3px #000; }
+.aimmsg:empty { display: none; }
+.aimmsg.ok { color: var(--good); }
+.aimenter { position: absolute; left: 16px; right: 16px; bottom: calc(108px + env(safe-area-inset-bottom)); min-height: 66px; font-size: 22px; border-radius: 16px; box-shadow: 0 4px 18px rgba(0,0,0,.5); opacity: .85; }
+.aimenter.ready { background: var(--good); border-color: var(--good); color: #062512; opacity: 1; }
+.zoombar { position: absolute; left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 18px; background: rgba(15,17,19,.85); }
+.zoombar > button { width: 72px; min-height: 72px; padding: 0; font-size: 34px; border-radius: 50%; background: var(--panel2); flex: none; }
+.zmid { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.zmid output { font-size: 20px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.zmid input { width: 100%; }
+body.aiming .banner { top: auto; bottom: calc(190px + env(safe-area-inset-bottom)); font-size: 17px; }
+body.wz { overflow: hidden; }
