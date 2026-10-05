@@ -477,6 +477,7 @@ async function startCamera() {
     S.src = { kind: 'camera', el: video, w: video.videoWidth, h: video.videoHeight };
     await setupCameraControls();
     afterSourceChange();
+    if (S.aiming) { S.mode = 'aim'; S.aimPrev = null; aimMessage(); updateButtons(); }
     status('Zoom in (pinch or the zoom bar) until the target fills the circle, then tap Find target.');
     enterAim();
   } catch (e) {
@@ -487,14 +488,89 @@ async function startCamera() {
 async function setupCameraControls() {
   const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
   const cur = S.track.getSettings().deviceId;
-  $('#camSel').innerHTML = devs.map((d, i) => `<option value="${esc(d.deviceId)}" ${d.deviceId === cur ? 'selected' : ''}>${esc(d.label || 'Camera ' + (i + 1))}</option>`).join('');
+  const names = lensNames(devs);
+  $('#camSel').innerHTML = devs.map((d, i) => `<option value="${esc(d.deviceId)}" ${d.deviceId === cur ? 'selected' : ''}>${esc(names[i])}</option>`).join('');
   $('#camRow').hidden = devs.length < 2;
+  $('#aimLens').hidden = false;
   const caps = S.track.getCapabilities ? S.track.getCapabilities() : {};
   S.hwMin = caps.zoom ? caps.zoom.min : 1;
   S.hwMax = caps.zoom ? caps.zoom.max : 1;
   setZoom(settings.camZoom || 1);
   $('#lockRow').hidden = !(caps.focusMode || caps.exposureMode);
   $('#lockIn').checked = !!settings.lock;
+}
+
+// ---------- Lens picker ----------
+// Android lists each physical camera Chrome can use as its own device. Opening each
+// one for a snapshot makes the telephoto obvious: it's the most zoomed-in view.
+function lensNames(devs) {
+  const count = {};
+  return devs.map(d => {
+    const facing = /front|user/i.test(d.label) ? 'Front' : /back|rear|environment/i.test(d.label) ? 'Back' : 'Camera';
+    count[facing] = (count[facing] || 0) + 1;
+    return `${facing} camera ${count[facing]}`;
+  });
+}
+
+async function chooseLens() {
+  if (!navigator.mediaDevices?.enumerateDevices) return toast('The camera needs HTTPS and a recent browser');
+  const dlg = $('#dlg');
+  $('#dlgBody').innerHTML = `<div class="dlgbar"><b>Choose camera</b><button id="lensClose">Close</button></div>
+    <p class="hint">Checking each camera. The telephoto is the one that looks most zoomed in. If there's no telephoto listed,
+    your phone only shares its main camera with the browser: pick Back camera 1 and zoom past 3× so it switches lens itself.</p>
+    <div class="lensgrid" id="lensGrid"></div>`;
+  dlg.showModal();
+  $('#lensClose').onclick = () => dlg.close();
+  const wasCam = S.src?.kind === 'camera', current = settings.camId || S.track?.getSettings().deviceId;
+  let picked = false, closed = false;
+  dlg.addEventListener('close', () => { closed = true; if (!picked && wasCam && !S.stream) startCamera(); }, { once: true });
+  // Phones can usually only open one camera at a time.
+  if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
+  try {
+    let devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    if (devs.some(d => !d.label)) { // labels appear only after camera permission
+      const st = await navigator.mediaDevices.getUserMedia({ video: true });
+      st.getTracks().forEach(t => t.stop());
+      devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    }
+    const names = lensNames(devs), grid = $('#lensGrid');
+    for (const [i, d] of devs.entries()) {
+      if (closed) return;
+      const card = document.createElement('button');
+      card.className = 'lens' + (d.deviceId === current ? ' sel' : '');
+      card.innerHTML = `<canvas width="240" height="180"></canvas><b>${esc(names[i])}</b><small>checking…</small>`;
+      card.onclick = () => {
+        picked = true;
+        settings.camId = d.deviceId; settings.camZoom = 1; saveSettings();
+        dlg.close();
+        startCamera();
+      };
+      grid.append(card);
+      let st;
+      try {
+        st = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: d.deviceId }, width: { ideal: 1280 } } });
+        const tr = st.getVideoTracks()[0], caps = tr.getCapabilities ? tr.getCapabilities() : {};
+        const v = document.createElement('video');
+        v.muted = true; v.playsInline = true; v.srcObject = st;
+        await v.play();
+        await new Promise(r => setTimeout(r, 600)); // let exposure settle
+        const c = card.querySelector('canvas'), ctx = c.getContext('2d');
+        const k = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
+        ctx.drawImage(v, (c.width - v.videoWidth * k) / 2, (c.height - v.videoHeight * k) / 2, v.videoWidth * k, v.videoHeight * k);
+        card.querySelector('small').textContent = [
+          caps.width && `up to ${caps.width.max}×${caps.height.max}`,
+          caps.zoom && caps.zoom.max > 1 && `zoom ${caps.zoom.min}–${caps.zoom.max}×`,
+          d.label,
+        ].filter(Boolean).join(' · ');
+      } catch (e) {
+        card.querySelector('small').textContent = `Can't open (${e.name}) · ${d.label}`;
+      } finally {
+        st?.getTracks().forEach(t => t.stop());
+      }
+    }
+  } catch (e) {
+    toast('Could not list cameras: ' + e.message);
+  }
 }
 
 // ---------- Zoom ----------
@@ -807,6 +883,7 @@ function updateButtons() {
   const locked = S.bulls.length > 0;
   $('#zoomBar').hidden = !S.aiming || S.mode === 'calib';
   $('#aimTop').hidden = !S.aiming;
+  $('#aimLens').hidden = S.src?.kind !== 'camera';
   $('#aimEnter').hidden = !S.aiming || S.mode === 'calib';
   $('#btnReaim').hidden = !locked;
   $('#btnZoom').hidden = !locked;
@@ -1130,6 +1207,8 @@ function init() {
   $('#zMinus').onclick = () => zStep(1 / 1.25);
   $('#zPlus').onclick = () => zStep(1.25);
   $('#btnReaim').onclick = enterAim;
+  $('#aimLens').onclick = chooseLens;
+  $('#btnLens').onclick = chooseLens;
   $('#lockIn').onchange = e => { settings.lock = e.target.checked; saveSettings(); applyLock(settings.lock); };
   $('#video').addEventListener('resize', () => {
     const v = $('#video');

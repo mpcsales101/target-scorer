@@ -143,3 +143,10 @@ body.aiming #view { height: 100vh !important; height: 100dvh !important; max-hei
 body.aiming .banner { top: calc(64px + env(safe-area-inset-top)); }
 .aimenter { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom)); min-width: 180px; min-height: 54px; font-size: 18px; border-radius: 14px; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
 body.aiming .zoombar { bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+/* Lens picker */
+.lensgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
+.lens { flex-direction: column; align-items: stretch; text-align: left; padding: 6px; gap: 4px; }
+.lens canvas { width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: #000; display: block; }
+.lens small { color: var(--muted); font-size: 11px; line-height: 1.3; word-break: break-word; }
+.lens.sel { border-color: var(--accent); }
