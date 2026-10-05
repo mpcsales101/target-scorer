@@ -182,10 +182,13 @@ function compToFrame(g, c) {
   return { x: g.ox + ((c.x0 + c.x1 + 1) / 2) * g.s, y: g.oy + ((c.y0 + c.y1 + 1) / 2) * g.s, r: ((bw + bh) / 4) * g.s };
 }
 
-// Best n round dark blobs of similar size (n > 1 for multi-bull cards).
+// Best n round dark blobs of similar size (n > 1 for multi-bull cards),
+// favouring blobs near the middle of the image, where the user aimed.
 export function findDarkBlobs(g, n = 1) {
   const { comps } = darkComponents(g);
-  const ranked = comps.map(c => ({ c, sc: blobScore(c) })).filter(o => o.sc > 0).sort((a, b) => b.sc - a.sc);
+  const mx = g.w / 2, my = g.h / 2, half = Math.hypot(g.w, g.h) / 2;
+  const centreWeight = c => 1 / (1 + (Math.hypot((c.x0 + c.x1) / 2 - mx, (c.y0 + c.y1) / 2 - my) / (0.35 * half)) ** 2);
+  const ranked = comps.map(c => ({ c, sc: blobScore(c) * centreWeight(c) })).filter(o => o.sc > 0).sort((a, b) => b.sc - a.sc);
   if (!ranked.length) return [];
   const top = ranked[0].c;
   const out = [top];

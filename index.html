@@ -38,8 +38,15 @@
         </div>
       </div>
       <div class="banner" id="banner" hidden></div>
+      <div class="zoombar" id="zoomBar" hidden>
+        <button id="zMinus" aria-label="Zoom out">−</button>
+        <input type="range" id="zSlider" min="0" max="1000" value="0" aria-label="Camera zoom">
+        <button id="zPlus" aria-label="Zoom in">+</button>
+        <output id="zOut">1.0×</output>
+      </div>
       <div class="viewtools">
-        <button id="btnZoom" title="Magnify">1×</button>
+        <button id="btnReaim" hidden>Re-aim</button>
+        <button id="btnZoom" title="Magnify" hidden>🔍 1×</button>
       </div>
     </div>
     <div class="status" id="status">Start the camera, load photos, or try the demo range.</div>
@@ -83,7 +90,6 @@
           <button id="btnDemo2">Demo range</button>
         </div>
         <label id="camRow" hidden>Camera <select id="camSel"></select></label>
-        <label id="zoomRow" hidden>Zoom <input type="range" id="zoomIn"> <output id="zoomOut"></output></label>
         <label id="lockRow" hidden class="check"><input type="checkbox" id="lockIn"> Lock focus &amp; exposure (after locking on)</label>
         <p class="hint" id="srcInfo"></p>
       </div>

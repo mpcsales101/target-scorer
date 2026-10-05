@@ -51,6 +51,10 @@ button.toggle[aria-pressed=true], button.on { background: rgba(255,184,0,.16); b
 .banner select, .banner input { width: auto; flex: 1 1 160px; padding: 8px; }
 .banner button { min-height: 36px; padding: 6px 12px; }
 .viewtools { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
+.zoombar { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 12px; background: rgba(15,17,19,.82); }
+.zoombar button { min-height: 40px; min-width: 44px; padding: 0; font-size: 22px; background: transparent; }
+.zoombar input { flex: 1; }
+.zoombar output { min-width: 46px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--accent); }
 .viewtools button { min-height: 36px; padding: 4px 10px; background: rgba(15,17,19,.8); }
 
 .status { margin: 8px 2px; color: var(--muted); font-size: 13px; min-height: 18px; }

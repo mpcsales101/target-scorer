@@ -29,7 +29,9 @@ const S = {
   card: newCard(), session: null, sel: null, lastId: null,
   mode: 'idle', calib: null, auto: false, pending: [], quiet: 0, busy: false,
   zoom: 1, center: null, vf: null, drag: null, pan: null, dirty: true,
+  camZ: 1, hwMin: 1, hwMax: 1, dz: 1, pinch: null, tap: null,
 };
+const pointers = new Map();
 const cardProfile = () => profileById(S.card.profileId);
 
 // ---------- Small UI helpers ----------
@@ -131,8 +133,9 @@ async function findTarget() {
   if (!S.src) return toast('Start the camera, load photos or try the demo first');
   const p = profile();
   if (!p.black) return startCalib();
-  const s = Math.max(1, S.src.w / 640);
-  const cands = V.findDarkBlobs(grabGray({ x: 0, y: 0, w: S.src.w, h: S.src.h }, s), p.bulls);
+  // Search what's on screen, so zooming in and centring the target picks the right one.
+  const area = S.bulls.length ? { x: 0, y: 0, w: S.src.w, h: S.src.h } : aimRegion();
+  const cands = V.findDarkBlobs(grabGray(area, Math.max(1, area.w / 640)), p.bulls);
   const bulls = cands.map(c => refineAt(c.x, c.y, c.r, p.black / 2)).filter(Boolean);
   if (bulls.length < p.bulls) {
     startCalib();
@@ -387,6 +390,7 @@ function stopSource() {
 
 function afterSourceChange() {
   S.bulls = []; S.ref = null; S.zoom = 1; S.center = null;
+  if (S.src?.kind !== 'camera') { S.hwMin = S.hwMax = 1; setZoom(1); }
   $('#empty').hidden = true;
   updatePill(); updateButtons(); sizeView(); updateSourceUI(); requestRender();
 }
@@ -412,7 +416,7 @@ async function startCamera() {
     S.src = { kind: 'camera', el: video, w: video.videoWidth, h: video.videoHeight };
     await setupCameraControls();
     afterSourceChange();
-    status(`Camera ${S.src.w}×${S.src.h}. Zoom in on the target, then tap Find target.`);
+    status('Zoom in (pinch or the zoom bar) until the target fills the circle, then tap Find target.');
   } catch (e) {
     toast('Camera unavailable: ' + e.message);
   }
@@ -424,16 +428,56 @@ async function setupCameraControls() {
   $('#camSel').innerHTML = devs.map((d, i) => `<option value="${esc(d.deviceId)}" ${d.deviceId === cur ? 'selected' : ''}>${esc(d.label || 'Camera ' + (i + 1))}</option>`).join('');
   $('#camRow').hidden = devs.length < 2;
   const caps = S.track.getCapabilities ? S.track.getCapabilities() : {};
-  if (caps.zoom) {
-    const z = $('#zoomIn');
-    z.min = caps.zoom.min; z.max = caps.zoom.max; z.step = caps.zoom.step || 0.1;
-    if (settings.camZoom) await S.track.applyConstraints({ advanced: [{ zoom: clamp(settings.camZoom, caps.zoom.min, caps.zoom.max) }] }).catch(() => {});
-    z.value = S.track.getSettings().zoom || caps.zoom.min;
-    $('#zoomOut').textContent = (+z.value).toFixed(1) + '×';
-  }
-  $('#zoomRow').hidden = !caps.zoom;
+  S.hwMin = caps.zoom ? caps.zoom.min : 1;
+  S.hwMax = caps.zoom ? caps.zoom.max : 1;
+  setZoom(settings.camZoom || 1);
   $('#lockRow').hidden = !(caps.focusMode || caps.exposureMode);
   $('#lockIn').checked = !!settings.lock;
+}
+
+// ---------- Zoom ----------
+// One zoom control: the camera's own zoom first, then a digital crop up to 4× more.
+const DIGITAL_MAX = 4;
+const maxZoom = () => (S.src?.kind === 'camera' ? S.hwMax / S.hwMin : 1) * DIGITAL_MAX;
+let hwPending = null, hwBusy = false;
+
+function applyHwZoom(z) {
+  hwPending = z;
+  if (hwBusy || !S.track) return;
+  hwBusy = true;
+  const v = hwPending;
+  hwPending = null;
+  S.track.applyConstraints({ advanced: [{ zoom: v }] }).catch(() => {}).finally(() => {
+    hwBusy = false;
+    if (hwPending != null) applyHwZoom(hwPending);
+  });
+}
+
+function setZoom(z, unlock = false) {
+  z = clamp(z, 1, maxZoom());
+  if (unlock && S.bulls.length) reaim('Zoom changed. Centre the target and tap Find target.');
+  S.camZ = z;
+  const hwRange = S.src?.kind === 'camera' ? S.hwMax / S.hwMin : 1;
+  const hw = Math.min(z, hwRange);
+  S.dz = z / hw;
+  if (S.src?.kind === 'camera' && S.hwMax > S.hwMin) applyHwZoom(S.hwMin * hw);
+  $('#zSlider').value = Math.round((Math.log(z) / Math.log(maxZoom())) * 1000);
+  $('#zOut').textContent = z.toFixed(1) + '×';
+  if (S.src?.kind === 'camera') { settings.camZoom = z; saveSettings(); }
+  requestRender();
+}
+
+// The part of the frame shown while aiming (centre crop for digital zoom).
+function aimRegion() {
+  const w = S.src.w / S.dz, h = S.src.h / S.dz;
+  return { x: (S.src.w - w) / 2, y: (S.src.h - h) / 2, w, h };
+}
+
+function reaim(msg = 'Zoom in, put the target in the circle, then tap Find target.') {
+  S.bulls = []; S.ref = null; S.auto = false; S.pending = []; S.zoom = 1;
+  S.mode = 'idle'; S.calib = null; hideBanner();
+  status(msg, 'warn');
+  updatePill(); updateButtons(); sizeView(); requestRender();
 }
 
 function applyLock(on) {
@@ -479,7 +523,7 @@ function startDemo() {
   S.demo = new DemoRange(profile(), { pelletD: settings.pellet, sway: 0.6 });
   S.src = { kind: 'demo', el: S.demo.canvas, w: S.demo.o.w, h: S.demo.o.h };
   afterSourceChange();
-  status('Demo range: tap Find target, then Fire demo shot and Score shot (or turn on Auto).');
+  status('Demo range: zoom in on the target, tap Find target, then Fire demo shot and Score shot.');
 }
 
 function updateSourceUI() {
@@ -496,6 +540,7 @@ const toScreen = (f, x, y) => [f.ox + (x - f.r.x) * f.sc, f.oy + (y - f.r.y) * f
 const toFrame = (f, x, y) => [f.r.x + (x - f.ox) / f.sc, f.r.y + (y - f.oy) / f.sc];
 
 function viewRegion() {
+  if (!S.bulls.length) return aimRegion();
   const base = roiNow();
   if (S.zoom <= 1) return base;
   const w = base.w / S.zoom, h = base.h / S.zoom;
@@ -570,6 +615,14 @@ function drawOverlay(ctx, f, still = false) {
     ctx.fillStyle = s.id === S.lastId ? '#ffb800' : '#d8f4ff';
     ctx.fillText(t, x + r + 2, y - r - 1);
   });
+  if (!still && !S.bulls.length && S.mode !== 'calib') {
+    const cx = f.ox + (f.r.w * f.sc) / 2, cy = f.oy + (f.r.h * f.sc) / 2, rr = Math.min(f.r.w, f.r.h) * f.sc * 0.22;
+    ctx.strokeStyle = 'rgba(255,184,0,.9)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 2 * Math.PI);
+    ctx.moveTo(cx - rr - 14, cy); ctx.lineTo(cx - rr + 10, cy); ctx.moveTo(cx + rr - 10, cy); ctx.lineTo(cx + rr + 14, cy);
+    ctx.moveTo(cx, cy - rr - 14); ctx.lineTo(cx, cy - rr + 10); ctx.moveTo(cx, cy + rr - 10); ctx.lineTo(cx, cy + rr + 14);
+    ctx.stroke();
+  }
   if (!still) {
     ctx.setLineDash([3, 3]); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
     for (const q of S.pending) {
@@ -674,7 +727,11 @@ function updateButtons() {
   $('#btnUndo').disabled = !S.card.shots.length;
   $('#btnAdd').classList.toggle('on', S.mode === 'add');
   $('#btnAuto').setAttribute('aria-pressed', String(S.auto));
-  $('#btnZoom').textContent = S.zoom + '×';
+  $('#btnZoom').textContent = '🔍 ' + (Math.round(S.zoom * 10) / 10) + '×';
+  const locked = S.bulls.length > 0;
+  $('#zoomBar').hidden = !S.src || locked || S.mode === 'calib';
+  $('#btnReaim').hidden = !locked;
+  $('#btnZoom').hidden = !locked;
   $('#btnEnd').disabled = !S.session;
 }
 
@@ -700,32 +757,45 @@ function hitShot(sx, sy) {
 function setupPointer() {
   const cv = $('#view');
   const local = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const spread = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a[0] - b[0], a[1] - b[1]); };
+
   cv.addEventListener('pointerdown', e => {
     if (!S.vf) return;
-    const [sx, sy] = local(e), [fx, fy] = toFrame(S.vf, sx, sy);
-    if (S.mode === 'calib') { onCalibTap(fx, fy); return; }
-    if (S.mode === 'add') {
-      if (!S.bulls.length) { toast('Lock on to the target first'); return; }
-      const s = addShotAtFrame(fx, fy, false);
-      S.sel = s && s.id; S.mode = 'idle';
-      updatePanels(); requestRender();
+    const [sx, sy] = local(e);
+    pointers.set(e.pointerId, [sx, sy]);
+    try { cv.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+    // Two fingers: pinch to zoom (camera zoom while aiming, magnifier once locked on).
+    if (pointers.size === 2) {
+      S.drag = null; S.pan = null; S.tap = null;
+      S.pinch = { d0: spread() || 1, z0: S.bulls.length ? S.zoom : S.camZ };
       return;
     }
+    if (pointers.size > 2) return;
+    // Taps (calibration, adding a shot) are handled on release so a pinch never counts as one.
+    if (S.mode === 'calib' || S.mode === 'add') { S.tap = [sx, sy]; return; }
     const hit = hitShot(sx, sy);
     if (hit) {
       const b = S.bulls[hit.bull];
       S.sel = hit.id;
       S.drag = { id: hit.id, start: [sx, sy], from: V.mmToFrame(b, hit.x, hit.y), moved: false };
-      cv.setPointerCapture(e.pointerId);
     } else {
       S.sel = null;
-      if (S.zoom > 1) { S.pan = { sx, sy, c: [...S.center] }; cv.setPointerCapture(e.pointerId); }
+      if (S.zoom > 1) S.pan = { sx, sy, c: [...S.center] };
     }
     updatePanels(); requestRender();
   });
+
   cv.addEventListener('pointermove', e => {
-    if (!S.vf || (!S.drag && !S.pan)) return;
+    if (!S.vf || !pointers.has(e.pointerId)) return;
     const [sx, sy] = local(e);
+    pointers.set(e.pointerId, [sx, sy]);
+    if (S.pinch && pointers.size === 2) {
+      const z = S.pinch.z0 * (spread() / S.pinch.d0);
+      if (S.bulls.length) { S.zoom = clamp(z, 1, 8); updateButtons(); requestRender(); }
+      else setZoom(z);
+      return;
+    }
+    if (S.tap && Math.hypot(sx - S.tap[0], sy - S.tap[1]) > 12) S.tap = null;
     if (S.drag) {
       const s = S.card.shots.find(q => q.id === S.drag.id), b = s && S.bulls[s.bull];
       if (!b) return;
@@ -735,19 +805,36 @@ function setupPointer() {
       rescore(s);
       S.drag.moved = true;
       updatePanels();
-    } else {
+      requestRender();
+    } else if (S.pan) {
       S.center = [S.pan.c[0] - (sx - S.pan.sx) / S.vf.sc, S.pan.c[1] - (sy - S.pan.sy) / S.vf.sc];
+      requestRender();
     }
-    requestRender();
   });
-  const end = () => { if (S.drag?.moved) persist(); S.drag = null; S.pan = null; };
+
+  const end = e => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) S.pinch = null;
+    if (e.type === 'pointerup' && S.tap && S.vf) {
+      const [fx, fy] = toFrame(S.vf, S.tap[0], S.tap[1]);
+      if (S.mode === 'calib') onCalibTap(fx, fy);
+      else if (S.mode === 'add') {
+        const s = addShotAtFrame(fx, fy, false);
+        S.sel = s && s.id; S.mode = 'idle';
+        updatePanels(); requestRender();
+      }
+    }
+    S.tap = null;
+    if (S.drag?.moved) persist();
+    S.drag = null; S.pan = null;
+  };
   cv.addEventListener('pointerup', end);
   cv.addEventListener('pointercancel', end);
 }
 
 function cycleZoom() {
   if (!S.src) return;
-  S.zoom = { 1: 2, 2: 4, 4: 8, 8: 1 }[S.zoom];
+  S.zoom = [2, 4, 8].find(z => z > S.zoom + 0.01) || 1;
   const s = S.card.shots.find(q => q.id === S.sel) || S.card.shots.find(q => q.id === S.lastId);
   S.center = s && S.bulls[s.bull] ? V.mmToFrame(S.bulls[s.bull], s.x, s.y) : S.bulls[0] ? [S.bulls[0].cx, S.bulls[0].cy] : null;
   updateButtons(); requestRender();
@@ -956,13 +1043,11 @@ function init() {
     updatePanels(); requestRender();
   };
   $('#camSel').onchange = e => { settings.camId = e.target.value; saveSettings(); startCamera(); };
-  $('#zoomIn').oninput = e => {
-    const z = +e.target.value;
-    $('#zoomOut').textContent = z.toFixed(1) + '×';
-    S.track?.applyConstraints({ advanced: [{ zoom: z }] }).catch(() => {});
-    settings.camZoom = z; saveSettings();
-    if (S.bulls.length) { S.bulls = []; S.ref = null; S.auto = false; updatePill(); updateButtons(); sizeView(); status('Zoom changed. Tap Find target again.', 'warn'); }
-  };
+  const zStep = f => setZoom(S.camZ * f, true);
+  $('#zSlider').oninput = e => setZoom(Math.exp((+e.target.value / 1000) * Math.log(maxZoom())), true);
+  $('#zMinus').onclick = () => zStep(1 / 1.25);
+  $('#zPlus').onclick = () => zStep(1.25);
+  $('#btnReaim').onclick = () => reaim();
   $('#lockIn').onchange = e => { settings.lock = e.target.checked; saveSettings(); applyLock(settings.lock); };
   $('#video').addEventListener('resize', () => {
     const v = $('#video');
