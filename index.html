@@ -32,9 +32,10 @@
       <canvas id="view"></canvas>
       <div class="empty" id="empty">
         <div class="bigicon" aria-hidden="true">🎯</div>
-        <h2>Set up your target</h2>
-        <p>Three quick steps: choose the target, choose the camera, then aim.</p>
+        <h2 id="emptyTitle">Set up your target</h2>
+        <p id="emptyText">Three quick steps: choose the target, choose the camera, then aim.</p>
         <button class="accent huge" id="btnStart">Start setup</button>
+        <button class="big" id="btnChange2" hidden>Change setup</button>
       </div>
       <div class="aimtop" id="aimTop" hidden>
         <div class="aimrow">
@@ -63,9 +64,8 @@
     <div class="status" id="status">Tap Start setup to begin.</div>
 
     <div class="readout">
-      <div><span>Last</span><b id="rLast">–</b></div>
-      <div><span>Total</span><b id="rTotal">–</b><small id="rDec"></small></div>
-      <div><span>Shots</span><b id="rCount">0</b></div>
+      <div><span>Last shot</span><b id="rLast">–</b></div>
+      <div><span>Total · <i id="rCount">0</i> shots</span><b id="rTotal">–</b><small id="rDec"></small></div>
     </div>
 
     <button class="accent huge" id="btnScore">Score shot</button>
@@ -75,30 +75,28 @@
       <button id="btnAdd">＋ Add</button>
     </div>
     <button class="big wide" id="btnFire" hidden>💥 Fire demo shot</button>
-    <details class="more">
-      <summary>More options</summary>
+    <details class="more" id="moreBox">
+      <summary>More: group, series, card &amp; camera</summary>
       <div class="actions small">
         <button id="btnDel" disabled>Delete selected</button>
         <button id="btnRef" title="Re-take the reference image without scoring">Reset reference</button>
         <button id="btnFind">Aim again</button>
       </div>
-      <p class="hint">Tap a marker to select it, drag it to move it.</p>
-    </details>
+      <p class="hint">Tap a marker on the picture to select it; drag to move it.</p>
 
-    <div class="grid2">
-      <div class="panel plotwrap"><canvas id="plot"></canvas></div>
-      <div class="panel" id="stats"></div>
-    </div>
+      <div class="grid2">
+        <div class="panel plotwrap"><canvas id="plot"></canvas></div>
+        <div class="panel" id="stats"></div>
+      </div>
 
-    <div class="panel">
-      <div class="phead"><h3>Card</h3><div class="row"><button id="btnNewCard">New card</button><button id="btnEnd">End session</button></div></div>
-      <div id="series"></div>
-      <div class="chips" id="chips"></div>
-    </div>
+      <div class="panel">
+        <div class="phead"><h3>Card</h3><div class="row"><button id="btnNewCard">New card</button><button id="btnEnd">End session</button></div></div>
+        <div id="series"></div>
+        <div class="chips" id="chips"></div>
+      </div>
 
-    <details class="panel" id="srcPanel">
-      <summary>Camera &amp; source</summary>
-      <div class="form">
+      <div class="panel form" id="srcPanel">
+        <h3>Camera &amp; source</h3>
         <div class="row">
           <button id="btnCam2">Camera</button>
           <label class="btn">Add photos<input type="file" accept="image/*" multiple id="photoIn2" hidden></label>

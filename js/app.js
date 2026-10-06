@@ -130,6 +130,22 @@ function sortBulls(bs) {
 }
 
 // ---------- Calibration ----------
+// After the first setup, the start screen offers one tap to carry on with the same target and camera.
+function updateEmpty() {
+  const again = settings.setupDone && settings.lastSource !== 'photo';
+  $('#emptyTitle').textContent = again ? 'Ready to shoot' : 'Set up your target';
+  $('#emptyText').textContent = again
+    ? `${profile().name} · ${settings.pellet === 5.5 ? '.22' : '.177'}. Point the phone at the target and tap Start.`
+    : 'Three quick steps: choose the target, choose the camera, then aim.';
+  $('#btnStart').textContent = again ? '▶ Start shooting' : 'Start setup';
+  $('#btnChange2').hidden = !again;
+}
+
+function startFlow() {
+  if (!(settings.setupDone && settings.lastSource !== 'photo')) return openWizard(1);
+  if (settings.lastSource === 'demo') startDemo(); else startCamera();
+}
+
 // ---------- Setup wizard ----------
 // Step 1: target and pellet. Step 2: camera. Step 3 is the full-screen aiming view.
 function openWizard(step = 1) {
@@ -320,6 +336,7 @@ async function setCalibration(bulls) {
   else status(`Locked on · holes ≈ ${hp.toFixed(0)} px wide. Shoot, then tap Score shot (or turn on Auto).`, 'ok');
   updatePill(); updateButtons(); sizeView(); requestRender();
   if (settings.lock) applyLock(true);
+  settings.setupDone = true; settings.lastSource = S.src.kind; saveSettings();
   if (S.aiming) exitAim(false);
 }
 
@@ -928,6 +945,8 @@ function updatePanels() {
 }
 
 function updateButtons() {
+  document.body.classList.toggle('ready', !!S.src);
+  updateEmpty();
   $('#btnDel').disabled = !S.sel;
   $('#btnUndo').disabled = !S.card.shots.length;
   $('#btnAdd').classList.toggle('on', S.mode === 'add');
@@ -1251,7 +1270,8 @@ function init() {
   $('#wzClose').onclick = closeWizard;
   $('#wzLens').onclick = chooseLens;
   $('#wzKeep').onclick = () => enterAim();
-  $('#btnStart').onclick = () => openWizard(1);
+  $('#btnStart').onclick = startFlow;
+  $('#btnChange2').onclick = () => openWizard(1);
   $('#btnSetup').onclick = () => openWizard(1);
   $('#camSel').onchange = e => { settings.camId = e.target.value; saveSettings(); startCamera(); };
   const zStep = f => setZoom(S.camZ * f, true);
@@ -1280,7 +1300,7 @@ function init() {
   setInterval(autoTick, 400);
   updatePanels();
 
-  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && !window.Capacitor) // the Android app already has its files navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 init();

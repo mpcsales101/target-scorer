@@ -1,0 +1,8 @@
+{
+  "appId": "com.mpcsales.targetscorer",
+  "appName": "Target Scorer",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0f1113"
+  }
+}

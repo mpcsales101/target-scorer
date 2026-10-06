@@ -57,7 +57,7 @@ button.toggle[aria-pressed=true], button.on { background: rgba(255,184,0,.16); b
 .status[data-kind=ok] { color: var(--good); }
 .status[data-kind=warn] { color: var(--warn); }
 
-.readout { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.readout { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .readout > div { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; }
 .readout span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .readout b { font-size: 28px; font-variant-numeric: tabular-nums; line-height: 1.1; }
@@ -208,3 +208,11 @@ body.aiming #view { height: 100vh !important; height: 100dvh !important; max-hei
 .zmid input { width: 100%; }
 body.aiming .banner { top: auto; bottom: calc(190px + env(safe-area-inset-bottom)); font-size: 17px; }
 body.wz { overflow: hidden; }
+
+.readout b { font-size: 40px; }
+.readout span i { font-style: normal; }
+body:not(.ready) #setupCard, body:not(.ready) .status, body:not(.ready) .readout,
+body:not(.ready) #btnScore, body:not(.ready) .actions3, body:not(.ready) #moreBox { display: none; }
+.empty .big { max-width: 320px; width: 100%; }
+.more > summary { font-weight: 600; color: var(--muted); }
+.more[open] > summary { margin-bottom: 8px; }
